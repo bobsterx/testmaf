@@ -41,6 +41,27 @@ def lobby_keyboard(game: Game) -> InlineKeyboardMarkup:
 def format_lobby(game: Game) -> str:
     humans = [p.display_name for p in game.players.values() if not p.is_bot]
     bots = [p.display_name for p in game.players.values() if p.is_bot]
+    lines = [
+        "<b>🎭 Лобі мафії</b>",
+        """<i>Запрошуйте друзів, додавайте ботів та натискайте "Почати", коли будете готові.</i>""",
+        "",
+    ]
+    if humans:
+        lines.append("👥 <b>Люди</b>")
+        lines.extend(f"• {name}" for name in humans)
+    else:
+        lines.append("👥 Ще ніхто не долучився")
+    if bots:
+        lines.extend(["", "🤖 <b>Боти</b>"])
+        lines.extend(f"• {bot}" for bot in bots)
+    lines.extend(
+        [
+            "",
+            f"📦 Зайнято: <b>{len(game.players)}</b> з <b>{MAX_PLAYERS}</b>",
+            f"🚪 Мінімум для старту: <b>{MIN_PLAYERS}</b>",
+        ]
+    )
+    return "\n".join(lines)
     text = ["<b>Лобі мафії</b>"]
     text.append("Гравці:" if humans else "Гравців немає")
     for name in humans:

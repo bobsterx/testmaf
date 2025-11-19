@@ -19,6 +19,7 @@ from .config import (
     gif_path,
     MORNING_EVENTS,
 )
+from .flavor_bank import pick_day_caption, pick_night_caption, pick_vote_caption
 from .models import Phase, Player, Role, VoteResult
 
 
@@ -131,6 +132,10 @@ class Game:
         if gif:
             path = gif_path(gif)
             try:
+                data = path.read_bytes()
+                await context.bot.send_animation(
+                    chat_id=self.chat_id,
+                    animation=InputFile(data, filename=path.name),
                 await context.bot.send_animation(
                     chat_id=self.chat_id,
                     animation=InputFile(path),
@@ -162,6 +167,13 @@ class Game:
         self.assign_roles()
         self.phase = Phase.NIGHT
         self.day_counter = 0
+        intro = (
+            "<b>Місто пробуджується для нової партії мафії!</b>\n"
+            "Кожен гравець отримав роль, а атмосфера вже наповнилася інтригою."
+        )
+        await self.send_group(
+            context,
+            text=f"{intro}\n\n{pick_night_caption()}",
         await self.send_group(
             context,
             text="Гра розпочалась! Місто засинає...",
@@ -186,6 +198,8 @@ class Game:
     async def prepare_night_actions(self, context: ContextTypes.DEFAULT_TYPE) -> None:
         self.reset_actions()
         self.phase = Phase.NIGHT
+        banner = NIGHT_BANNERS[self.next_night_banner]
+        await self.send_group(context, f"{pick_night_caption()}\n\n{banner}", gif="night")
         await self.send_group(context, NIGHT_BANNERS[self.next_night_banner], gif="night")
         self.next_night_banner = "night_no_kick"
         for player in self.living_players():
@@ -401,6 +415,7 @@ class Game:
             event_key = "event_single_death"
         else:
             event_key = "event_both_died"
+        text = f"{pick_day_caption()}\n\n{MORNING_EVENTS[event_key]}"
         text = MORNING_EVENTS[event_key]
         if doc_saved:
             text += f"\n\n{MORNING_EVENTS['doc_saved']}"
@@ -409,6 +424,22 @@ class Game:
             await self.send_group(context, f"{player.mention()} загинув цієї ночі.", gif="dead")
             if player.role == Role.DON:
                 if any(p.alive and p.role == Role.MAFIA for p in self.players.values()):
+                    await self.send_group(context, f"{pick_day_caption()}\n\n{MORNING_EVENTS['don_dead_mafia_alive']}")
+                    inheritor = next(p for p in self.players.values() if p.alive and p.role == Role.MAFIA)
+                    inheritor.role = Role.DON
+                else:
+                    await self.send_group(
+                        context,
+                        f"{pick_day_caption()}\n\n{MORNING_EVENTS['don_dead_no_mafia']}",
+                        gif="lost_mafia",
+                    )
+                    self.winner = "Мирні"
+            elif player.role == Role.DOCTOR:
+                await self.send_group(context, f"{pick_day_caption()}\n\n{MORNING_EVENTS['doc_dead']}")
+            elif player.role == Role.DETECTIVE:
+                await self.send_group(context, f"{pick_day_caption()}\n\n{MORNING_EVENTS['detective_dead']}")
+            elif player.role == Role.CIVIL:
+                await self.send_group(context, f"{pick_day_caption()}\n\n{MORNING_EVENTS['civil_dead']}")
                     await self.send_group(context, MORNING_EVENTS["don_dead_mafia_alive"])
                     inheritor = next(p for p in self.players.values() if p.alive and p.role == Role.MAFIA)
                     inheritor.role = Role.DON
@@ -430,6 +461,10 @@ class Game:
         self.day_counter += 1
         await self.send_group(
             context,
+            text=(
+                f"{pick_day_caption()}\n\n"
+                f"<b>День {self.day_counter}</b>. Обговоріть події та готуйтеся до голосування."
+            ),
             text=f"День {self.day_counter}. Обговоріть події та готуйтеся до голосування.",
             gif="morning",
         )
@@ -440,6 +475,11 @@ class Game:
             return
         self.phase = Phase.VOTE
         self.pending_votes.clear()
+        await self.send_group(
+            context,
+            f"{pick_vote_caption()}\n\nПочинаємо голосування. 30 секунд на вибір.",
+            gif="vote",
+        )
         await self.send_group(context, "Починаємо голосування. 30 секунд на вибір.", gif="vote")
         for player in self.living_players():
             await self.send_dm(context, player, "Кого підозрюєш?", self.vote_keyboard(player.user_id))
@@ -451,6 +491,7 @@ class Game:
         self.phase = Phase.NIGHT
         result = self.calculate_votes()
         if result.target is None:
+            await self.send_group(context, f"{pick_vote_caption()}\n\nМісто вирішило нікого не чіпати.")
             await self.send_group(context, "Місто вирішило нікого не чіпати.")
             await self.prepare_night_actions(context)
             self.schedule_job(context, "resolve_night", NIGHT_DURATION, self.resolve_night)
@@ -507,6 +548,17 @@ class Game:
 
     async def finish_game(self, context: ContextTypes.DEFAULT_TYPE) -> None:
         if self.winner == "Мирні":
+            await self.send_group(
+                context,
+                f"{pick_day_caption()}\n\n{MORNING_EVENTS['event_civil_won']}",
+                gif="lost_mafia",
+            )
+        elif self.winner == "Мафія":
+            await self.send_group(
+                context,
+                f"{pick_day_caption()}\n\n{MORNING_EVENTS['event_mafia_win']}",
+                gif="lost_civil",
+            )
             await self.send_group(context, MORNING_EVENTS["event_civil_won"], gif="lost_mafia")
         elif self.winner == "Мафія":
             await self.send_group(context, MORNING_EVENTS["event_mafia_win"], gif="lost_civil")
