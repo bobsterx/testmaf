@@ -136,6 +136,9 @@ class Game:
                 await context.bot.send_animation(
                     chat_id=self.chat_id,
                     animation=InputFile(data, filename=path.name),
+                await context.bot.send_animation(
+                    chat_id=self.chat_id,
+                    animation=InputFile(path),
                     caption=text,
                     parse_mode=ParseMode.HTML,
                 )
@@ -171,6 +174,9 @@ class Game:
         await self.send_group(
             context,
             text=f"{intro}\n\n{pick_night_caption()}",
+        await self.send_group(
+            context,
+            text="Гра розпочалась! Місто засинає...",
             gif="night",
         )
         await self.push_role_messages(context)
@@ -194,6 +200,7 @@ class Game:
         self.phase = Phase.NIGHT
         banner = NIGHT_BANNERS[self.next_night_banner]
         await self.send_group(context, f"{pick_night_caption()}\n\n{banner}", gif="night")
+        await self.send_group(context, NIGHT_BANNERS[self.next_night_banner], gif="night")
         self.next_night_banner = "night_no_kick"
         for player in self.living_players():
             if player.role == Role.DON:
@@ -409,6 +416,7 @@ class Game:
         else:
             event_key = "event_both_died"
         text = f"{pick_day_caption()}\n\n{MORNING_EVENTS[event_key]}"
+        text = MORNING_EVENTS[event_key]
         if doc_saved:
             text += f"\n\n{MORNING_EVENTS['doc_saved']}"
         await self.send_group(context, text, gif="morning")
@@ -432,6 +440,18 @@ class Game:
                 await self.send_group(context, f"{pick_day_caption()}\n\n{MORNING_EVENTS['detective_dead']}")
             elif player.role == Role.CIVIL:
                 await self.send_group(context, f"{pick_day_caption()}\n\n{MORNING_EVENTS['civil_dead']}")
+                    await self.send_group(context, MORNING_EVENTS["don_dead_mafia_alive"])
+                    inheritor = next(p for p in self.players.values() if p.alive and p.role == Role.MAFIA)
+                    inheritor.role = Role.DON
+                else:
+                    await self.send_group(context, MORNING_EVENTS["don_dead_no_mafia"], gif="lost_mafia")
+                    self.winner = "Мирні"
+            elif player.role == Role.DOCTOR:
+                await self.send_group(context, MORNING_EVENTS["doc_dead"])
+            elif player.role == Role.DETECTIVE:
+                await self.send_group(context, MORNING_EVENTS["detective_dead"])
+            elif player.role == Role.CIVIL:
+                await self.send_group(context, MORNING_EVENTS["civil_dead"])
 
     async def start_day(self, context: ContextTypes.DEFAULT_TYPE) -> None:
         if self.winner:
@@ -445,6 +465,7 @@ class Game:
                 f"{pick_day_caption()}\n\n"
                 f"<b>День {self.day_counter}</b>. Обговоріть події та готуйтеся до голосування."
             ),
+            text=f"День {self.day_counter}. Обговоріть події та готуйтеся до голосування.",
             gif="morning",
         )
         self.schedule_job(context, "start_vote", DAY_DURATION, self.start_vote)
@@ -459,6 +480,7 @@ class Game:
             f"{pick_vote_caption()}\n\nПочинаємо голосування. 30 секунд на вибір.",
             gif="vote",
         )
+        await self.send_group(context, "Починаємо голосування. 30 секунд на вибір.", gif="vote")
         for player in self.living_players():
             await self.send_dm(context, player, "Кого підозрюєш?", self.vote_keyboard(player.user_id))
         self.schedule_job(context, "resolve_vote", VOTE_DURATION, self.resolve_vote)
@@ -470,6 +492,7 @@ class Game:
         result = self.calculate_votes()
         if result.target is None:
             await self.send_group(context, f"{pick_vote_caption()}\n\nМісто вирішило нікого не чіпати.")
+            await self.send_group(context, "Місто вирішило нікого не чіпати.")
             await self.prepare_night_actions(context)
             self.schedule_job(context, "resolve_night", NIGHT_DURATION, self.resolve_night)
             return
@@ -536,6 +559,9 @@ class Game:
                 f"{pick_day_caption()}\n\n{MORNING_EVENTS['event_mafia_win']}",
                 gif="lost_civil",
             )
+            await self.send_group(context, MORNING_EVENTS["event_civil_won"], gif="lost_mafia")
+        elif self.winner == "Мафія":
+            await self.send_group(context, MORNING_EVENTS["event_mafia_win"], gif="lost_civil")
         self.phase = Phase.ENDED
         for job in list(self.jobs):
             self.cancel_job(job)

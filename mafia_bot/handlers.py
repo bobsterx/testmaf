@@ -62,6 +62,17 @@ def format_lobby(game: Game) -> str:
         ]
     )
     return "\n".join(lines)
+    text = ["<b>Лобі мафії</b>"]
+    text.append("Гравці:" if humans else "Гравців немає")
+    for name in humans:
+        text.append(f"• {name}")
+    if bots:
+        text.append("\nБоти:")
+        for bot in bots:
+            text.append(f"• {bot}")
+    text.append(f"\nЗареєстровано: {len(game.players)}/{MAX_PLAYERS}")
+    text.append(f"Мінімум для старту: {MIN_PLAYERS}")
+    return "\n".join(text)
 
 
 async def start_private(update: Update, context: CallbackContext) -> None:
